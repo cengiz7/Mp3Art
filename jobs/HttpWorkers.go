@@ -7,10 +7,15 @@ import (
 	"fmt"
 )
 
-func makeRequest( baseURL *string ) *http.Response {
+
+func GetAccessToken( baseURL string ) string {
+	return findAccessToken( makeTokenRequest( baseURL ) )
+}
+
+func makeTokenRequest( baseURL string ) *http.Response {
 	client := &http.Client{}
 
-	req, err := http.NewRequest("GET", *baseURL,nil); if err != nil {
+	req, err := http.NewRequest("GET", baseURL,nil); if err != nil {
 		log.Fatal("Couldn't initialize new request: ", err)
 	}
 	// set the necessary headers
@@ -49,14 +54,10 @@ func findAccessToken( response *http.Response ) string {
 	return token
 }
 
-func GetAccessToken( baseURL *string ) string {
-	return findAccessToken( makeRequest( baseURL ) )
-}
-
-func GetMusicList(searchURL,accessToken,market,name *string) {
+func GetMusicList(searchURL,accessToken,market,name string) {
 	client := &http.Client{}
 
-	req, err := http.NewRequest("GET", *searchURL ,nil); if err != nil {
+	req, err := http.NewRequest("GET", searchURL ,nil); if err != nil {
 		log.Fatal("Couldn't initialize new request: ", err)
 	}
 
@@ -65,16 +66,16 @@ func GetMusicList(searchURL,accessToken,market,name *string) {
 	q.Add("include_external", "audio")
 	q.Add("best_match", "true")
 	q.Add("userless", "true")
-	q.Add("market", *market)
+	q.Add("market", market)
 	q.Add("limit", "50")
 	q.Add("type", "track,show_audio,episode_audio")
-	q.Add("q", *name)
+	q.Add("q", name)
 
 	req.URL.RawQuery = q.Encode()
 
 	fmt.Println(req.URL.String())
 
-	req.Header.Set("Authorization", "Bearer " + *accessToken)
+	req.Header.Set("Authorization", "Bearer " + accessToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
