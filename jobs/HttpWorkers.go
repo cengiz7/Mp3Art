@@ -54,35 +54,48 @@ func findAccessToken( response *http.Response ) string {
 	return token
 }
 
-func GetMusicList(searchURL,accessToken,market,name string) {
+func GetQueryResult( paramsCh <- chan []string , getQueryResultCh chan <- map[string][]byte ) {
 	client := &http.Client{}
+	for paramList := range paramsCh {
+		accessToken	:= paramList[0]
+		searchURL 	:= paramList[1]
+		market		:= paramList[2]
+		name		:= paramList[3]
+		filePath 	:= paramList[4]
 
-	req, err := http.NewRequest("GET", searchURL ,nil); if err != nil {
-		log.Fatal("Couldn't initialize new request: ", err)
+		req, err := http.NewRequest("GET", searchURL ,nil); if err != nil {
+			log.Fatal("Couldn't initialize new request: ", err)
+		}
+
+		q := req.URL.Query()
+		q.Add("decorate_restrictions", "false")
+		q.Add("include_external", "audio")
+		q.Add("best_match", "true")
+		q.Add("userless", "true")
+		q.Add("market", market)
+		q.Add("limit", "50")
+		q.Add("type", "track,show_audio,episode_audio")
+		q.Add("q", name)
+
+		req.URL.RawQuery = q.Encode()
+
+		fmt.Println(req.URL.String())
+
+		req.Header.Set("Authorization", "Bearer " + accessToken)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Fatal("Mayday, mayday. We got a problem!:", err)
+		} else {
+			// Read json response data
+			fmt.Println(resp.StatusCode)
+			data, err := ioutil.ReadAll(resp.Body); if err != nil {
+				log.Println("Error while getting search query result: ",err)
+			} else {
+				// initialize map and send to the queue
+				m := map[string][]byte{filePath: data}
+				getQueryResultCh <- m
+			}
+		}
 	}
-
-	q := req.URL.Query()
-	q.Add("decorate_restrictions", "false")
-	q.Add("include_external", "audio")
-	q.Add("best_match", "true")
-	q.Add("userless", "true")
-	q.Add("market", market)
-	q.Add("limit", "50")
-	q.Add("type", "track,show_audio,episode_audio")
-	q.Add("q", name)
-
-	req.URL.RawQuery = q.Encode()
-
-	fmt.Println(req.URL.String())
-
-	req.Header.Set("Authorization", "Bearer " + accessToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal("Mayday, mayday. We got a problem!:", err)
-	}
-	// Read json response data
-	fmt.Println(resp.StatusCode)
-	data, err := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(data))
 }
