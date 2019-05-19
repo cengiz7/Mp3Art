@@ -52,7 +52,7 @@ func fixAndSaveFileName(files *[]string,save bool) map[string]string {
 			// map [ music path ] = music name
 			musicListMap[(*files)[0] + "/" + (*files)[i]] = (*files)[i]
 		} else {
-			// do not puts ignored musics root folder
+			// print ignored files (exclude root folder itself)
 			if  !strings.HasSuffix(filePath,"/musics") {
 				log.Println("Ignored file: ", filePath)
 			}
@@ -118,4 +118,13 @@ func FixFileNames (folderPath string,save bool) ( map[string]string, string, err
 	}
 	musicListMap := fixAndSaveFileName(&files, save)
 	return musicListMap, path, nil
+}
+
+func TrimFromEnd(name string) (string, bool) {
+	words := strings.Split(name, " ")
+	if len(words) <= 2 {
+		return "", false
+	} else {
+		return strings.Join(words[:len(words)-1]," "), true
+	}
 }

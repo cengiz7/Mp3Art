@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"../jobs"
@@ -15,8 +16,6 @@ var (
 	searchURL  	= "https://api.spotify.com/v1/search"
 	accessToken	= ""
 )
-
-// "api.spotify.com/v1/search?type=album%2Cartist%2Cplaylist%2Ctrack%2Cshow_audio%2Cepisode_audio&q=dualipa*&decorate_restrictions=false&best_match=true&include_external=audio&limit=50&userless=true&market=TR"
 
 func init() {
 	// create musics folder if not exists
@@ -46,38 +45,69 @@ func getAlbumArt( getArtCh <- chan map[string]string, setArtCh chan <- map[strin
 	}
 }
 
-func parseJSON ( getQueryResultCh <- chan map[string][]byte , getArtCh chan <- map[string]string ) {
+func dumpMap(space string, m map[string]interface{}) {
+	for k, v := range m {
+		if mv, ok := v.(map[string]interface{}); ok {
+			fmt.Printf("{ \"%v\": \n", k)
+			dumpMap(space+"\t", mv)
+			fmt.Printf("}\n")
+		} else {
+			fmt.Printf("%v %v : %v\n", space, k, v)
+		}
+	}
+}
+
+
+
+func parseJSON ( getQueryResultCh <- chan jobs.GetQueryResultStruct ,paramsCh chan <- []string, getArtCh chan <- map[string]string ) {
 	// TODO : parse json and send to the getart ch
-	for data := range getQueryResultCh {
+	for resultStruct := range getQueryResultCh {
 		var jsonMap map[string]interface{}
-		for path, jsonData := range data {
+		for path, jsonData := range resultStruct.Result {
 			err := json.Unmarshal(jsonData, &jsonMap); if err != nil {
 				log.Println("Error while processing json bytes to map:",err.Error())
 			} else {
-				fmt.Printf("%#v\n", jsonMap)
-				fmt.Println(path)
+				//fmt.Printf("%#v\n", jsonMap)
+				//fmt.Println(jsonMap["best_match"])
+				//_ , _ = dumpMap( jsonMap , true)
+				items := jsonMap["best_match"].(map[string]interface{})
+				for _ , a := range items["items"].([]interface{}) {
+					dumpMap("", a.(map[string]interface{}))
+				}
+				// we will continue
+				if _, ok := items["items"].(map[string]interface{}); ok || 1 == 1 {
+					path = path
+				} else {
+					fmt.Println("Couldn't found anything with name => ",resultStruct.Params[3])
+					if name, ok := jobs.TrimFromEnd(resultStruct.Params[3]); ok {
+						resultStruct.Params[3] = name
+						time.Sleep(10 * time.Second)
+						paramsCh <- resultStruct.Params
+					}
+				}
 			}
 		}
-		time.Sleep(time.Second * 100)
 	}
 }
 
 func main() {
 	accessToken = jobs.GetAccessToken( baseURL )
 	localZone 	:= "TR"
+	limit 		:= "1" // list object count for search query
 	save  		:= true
-
-	// carries mp3 file path and GET response data
-	getQueryResultChannel 	:= make(chan map[string][]byte)
+	// ----------- Channel declarations ------------ //
+	// carries struct for params slice and GET response data
+	getQueryResultChannel 	:= make(chan jobs.GetQueryResultStruct,  1000)
 	// carries mp3 file path and image url
-	getArtChannel 			:= make(chan map[string]string)
+	getArtChannel 			:= make(chan map[string]string, 100)
 	// carries mp3 file path and image data
-	setArtChannel 			:= make(chan map[string][]byte)
+	setArtChannel 			:= make(chan map[string][]byte, 500)
 	// carries parameters for GET query request
-	paramsChannel 			:= make(chan []string)
+	paramsChannel 			:= make(chan []string, 5000)
 
+	// --------------- Goroutines ------------------ //
 	go jobs.GetQueryResult( paramsChannel,getQueryResultChannel )
-	go parseJSON  ( getQueryResultChannel,getArtChannel )
+	go parseJSON  ( getQueryResultChannel,paramsChannel, getArtChannel )
 	go getAlbumArt( getArtChannel, setArtChannel )
 	go setAlbumArt( setArtChannel )
 
@@ -85,19 +115,9 @@ func main() {
 		log.Println("Couldn't fix file names at "+ path + "\n" + err.Error())
 	} else {
 		for path, name := range musicListMap {
-			paramsChannel <- []string{accessToken,searchURL,localZone,name,path}
-			time.Sleep(time.Second * 100)
-			break
+			name = strings.Replace(name,".mp3","",-1)
+			paramsChannel <- []string{accessToken,searchURL,localZone,name,limit,path}
 		}
-	}
-
-	for {
-		/* fmt.Printf("Give me the search string: ")
-		_, err := fmt.Scanln(&name); if err != nil {
-			log.Println("Couldn't get the string:",err)
-		}
-		jobs.GetMusicList( searchURL, accessToken, market, name) */
-
-		break
+		time.Sleep(time.Second * 100)
 	}
 }
