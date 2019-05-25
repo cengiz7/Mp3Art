@@ -122,7 +122,7 @@ func FixFileNames (folderPath string,save bool) ( map[string]string, string, err
 
 func TrimFromEnd(name string) (string, bool) {
 	words := strings.Split(name, " ")
-	if len(words) <= 2 {
+	if len(words) < 2 {
 		return "", false
 	} else {
 		return strings.Join(words[:len(words)-1]," "), true
