@@ -9,8 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
-	"github.com/bogem/id3v2"
+
 	"../jobs"
+	"github.com/bogem/id3v2"
 )
 
 var (
@@ -34,10 +35,12 @@ func init() {
 }
 
 func main() {
-	accessToken = jobs.GetAccessToken( baseURL )
-	localZone 	:= "TR"
-	limit 		:= "1" // list object count for search query
-	save  		:= true
+	accessToken 	= jobs.GetAccessToken( baseURL )
+	localZone 		:= "TR"
+	limit 			:= "1" // list object count for search query
+	save  			:= true
+	newRoutineLimit := 20 // if queued elements > 20 then new go routine
+
 	// ----------- Channel declarations ------------ //
 	// carries struct for params slice and GET response data
 	getQueryResultChannel 	:= make(chan jobs.GetQueryResultStruct,  1000)
@@ -47,11 +50,13 @@ func main() {
 	setArtChannel 			:= make(chan map[string][]byte, 500)
 	// carries parameters for GET query request
 	paramsChannel 			:= make(chan []string, 5000)
+	// carries signal for finishing main process
+	signalChannel 			:= make(chan bool)
 
 	// --------------- Goroutines ------------------ //
 	go jobs.GetQueryResult( paramsChannel,getQueryResultChannel )
 	go parseJSON  ( getQueryResultChannel,paramsChannel, getArtChannel )
-	go getAlbumArt( getArtChannel, setArtChannel )
+	go getAlbumArt( getArtChannel, setArtChannel, newRoutineLimit )
 	go setAlbumArt( setArtChannel )
 
 	musicListMap, path, err := jobs.FixFileNames("",save); if err != nil {
@@ -61,7 +66,22 @@ func main() {
 			name = strings.Replace(name,".mp3","",-1)
 			paramsChannel <- []string{accessToken,searchURL,localZone,name,limit,path}
 		}
-		time.Sleep(time.Second * 100)
+	}
+	// wait for the exit/finish signal
+	go finishProcess( signalChannel, paramsChannel, getArtChannel )
+	<- signalChannel
+}
+
+func finishProcess (signal chan <- bool, paramsCH chan []string, getArtCh chan map[string]string ) {
+	for {
+		if len(paramsCH) == 0  && len(getArtCh) == 0 {
+			log.Println("_____________ - All jobs are done. Exitting - _______________")
+			signal <- true
+			break  // breaj for not to write above message more than one
+		} else {
+			log.Printf("\n ParamsChannel queue: %d\n GetArchChannel queue: %d",len(paramsCH),len(getArtCh))
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -92,7 +112,7 @@ func setAlbumArt( setArtCh <- chan map[string][]byte ){
 	}
 }
 
-func getAlbumArt( getArtCh <- chan map[string]string, setArtCh chan <- map[string][]byte ){
+func getAlbumArt( getArtCh <- chan map[string]string, setArtCh chan <- map[string][]byte , limit int){
 	// get album art and send it to the setalbumart ch
 	for image := range getArtCh {
 		for path, url := range image {
@@ -102,6 +122,10 @@ func getAlbumArt( getArtCh <- chan map[string]string, setArtCh chan <- map[strin
 				setArtCh <- map[string][]byte{path:content}
 			}
 			resp.Body.Close()
+		}
+		// if nubmer of queued elements > 20 run another Go routine
+		if len(getArtCh) > limit {
+			go getAlbumArt( getArtCh, setArtCh , limit * 2)
 		}
 	}
 }

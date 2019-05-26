@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"fmt"
 	"net/url"
+	"time"
 )
 
 type GetQueryResultStruct struct {
@@ -39,7 +40,6 @@ func makeTokenRequest( baseURL string ) *http.Response {
 		log.Fatal("Mayday, mayday. We got a problem with getting access token!:", err)
 	}
 	// Read response
-
 	//data, err := ioutil.ReadAll(resp.Body)
 	//fmt.Println(string(data))
 	return resp
@@ -77,7 +77,7 @@ func GetQueryResult( paramsCh <- chan []string , getQueryResultCh chan <- GetQue
 		q := setQueryParams( req, market, limit, name)
 		req.URL.RawQuery = q.Encode()
 		req.Header.Set("Authorization", "Bearer " + accessToken)
-		 fmt.Println("\n"+req.URL.String()+"\n")
+		// fmt.Println("\n"+req.URL.String()+"\n")
 
 		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != 200 {
@@ -94,6 +94,8 @@ func GetQueryResult( paramsCh <- chan []string , getQueryResultCh chan <- GetQue
 				getQueryResultCh <- strct
 			}
 		}
+		// wait half second for the nex request
+		time.Sleep(time.Second / 2)
 	}
 }
 
